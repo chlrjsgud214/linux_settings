@@ -116,3 +116,46 @@ source $ZSH/oh-my-zsh.sh
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+
+# --- Python venv 자동 활성화/비활성화 ---
+function auto_venv() {
+  # 1. 현재 폴더에 가상환경이 있는지 확인 (venv 또는 .venv)
+  if [[ -d "./venv" ]]; then
+    # 이미 켜져 있는게 아니라면 켬
+    [[ "$VIRTUAL_ENV" != "$(pwd)/venv" ]] && source ./venv/bin/activate
+  elif [[ -d "./.venv" ]]; then
+    [[ "$VIRTUAL_ENV" != "$(pwd)/.venv" ]] && source ./.venv/bin/activate
+
+  # 2. 가상환경 폴더가 없는데, 현재 가상환경이 켜져 있다면?
+  elif [[ -n "$VIRTUAL_ENV" ]]; then
+    # 그 가상환경이 현재 폴더의 상위 경로가 아니라면 끔 (완전히 딴 곳으로 왔을 때)
+    # (자식 폴더로 들어간 경우는 유지)
+    if [[ ! "$(pwd)" == "$(dirname $(dirname "$VIRTUAL_ENV"))"* ]]; then
+      deactivate
+    fi
+  fi
+}
+
+# Zsh가 디렉토리를 바꿀 때마다(chpwd) 위 함수를 실행하도록 등록
+autoload -U add-zsh-hook
+add-zsh-hook chpwd auto_venv
+
+# 터미널 처음 켰을 때도 한 번 실행
+auto_venv
+
+# >>> conda initialize >>>
+# !! Contents within this block are managed by 'conda init' !!
+__conda_setup="$('/home/ubuntu/miniconda3/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
+if [ $? -eq 0 ]; then
+    eval "$__conda_setup"
+else
+    if [ -f "/home/ubuntu/miniconda3/etc/profile.d/conda.sh" ]; then
+        . "/home/ubuntu/miniconda3/etc/profile.d/conda.sh"
+    else
+        export PATH="/home/ubuntu/miniconda3/bin:$PATH"
+    fi
+fi
+unset __conda_setup
+# <<< conda initialize <<<
+
+alias ai='conda activate ai_edge'
