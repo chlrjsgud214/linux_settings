@@ -47,10 +47,10 @@ rm lazygit.tar.gz lazygit
 
 # 6. 설정 파일 심볼릭 링크 연결 (핵심!)
 echo "🔗 설정 파일 연결 중..."
-ln -sf ~/dotfiles/.zshrc ~/.zshrc
-ln -sf ~/dotfiles/.vimrc ~/.vimrc
-ln -sf ~/dotfiles/.p10k.zsh ~/.p10k.zsh
-# ln -sf ~/dotfiles/.tmux.conf ~/.tmux.conf
+ln -sf ~/linux_settings/.zshrc ~/.zshrc
+ln -sf ~/linux_settings/.vimrc ~/.vimrc
+ln -sf ~/linux_settings/.p10k.zsh ~/.p10k.zsh
+# ln -sf ~/linux_settings/.tmux.conf ~/.tmux.conf
 
 # 7. Vim 플러그인 자동 설치
 vim +PlugInstall +qall
