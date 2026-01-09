@@ -1,0 +1,277 @@
+
+---
+
+# 📁 AI Edge 개발 환경 구축 가이드 (WSL2 + USB Camera)
+
+## **1. Windows 호스트 설정 (USB 연결)**
+
+WSL2는 기본적으로 USB 장치를 직접 인식하지 못합니다. 마이크로소프트의 `usbipd-win` 도구를 통해 USB 연결을 '터널링' 해줘야 합니다.
+
+### **1-1. 도구 설치 (Windows PowerShell 관리자 권한)**
+
+```powershell
+winget install usbipd-win
+
+```
+
+*(설치 후 재부팅 권장)*
+
+### **1-2. 카메라 연결 (매번 재부팅 시 필요)**
+
+1. **[PowerShell 관리자]** 실행
+2. USB 목록 확인 및 Bus ID 찾기
+```powershell
+usbipd list
+
+```
+
+
+3. WSL로 카메라 연결 (Bus ID가 1-1인 경우)
+```powershell
+# 이미 연결된 상태면 끊고 다시 연결 (초기화)
+usbipd detach --busid 1-1
+usbipd attach --wsl --busid 1-1
+
+```
+
+
+
+---
+
+## **2. WSL2(Ubuntu) 리눅스 설정**
+
+리눅스 커널이 USB 카메라 드라이버를 로드할 수 있도록 패키지를 설치해야 합니다.
+
+### **2-1. 필수 드라이버 설치**
+
+```bash
+sudo apt update
+sudo apt install linux-tools-virtual hwdata
+sudo update-alternatives --install /usr/local/bin/usbip usbip /usr/lib/linux-tools/*/usbip 20
+
+```
+
+### **2-2. 카메라 장치 권한 설정**
+
+카메라가 연결되면 `/dev/video0` 파일이 생성됩니다. 이 파일에 접근 권한을 줍니다.
+
+```bash
+# 카메라 연결 확인
+ls -l /dev/video*
+
+# 권한 부여 (매번 연결 시 필요할 수 있음)
+sudo chmod 777 /dev/video0
+
+```
+
+### **2-3. 한글 폰트 설치 (OCR 결과 화면 표시용)**
+
+```bash
+sudo apt install fonts-nanum -y
+
+```
+
+---
+
+## **3. Python 가상환경 (Conda) 구축**
+
+시스템 파이썬을 더럽히지 않기 위해 Conda 가상환경을 사용합니다.
+
+### **3-1. Miniconda 설치**
+
+```bash
+mkdir -p ~/miniconda3
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh
+bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3
+rm -rf ~/miniconda3/miniconda.sh
+~/miniconda3/bin/conda init bash
+source ~/.bashrc
+
+```
+
+### **3-2. 가상환경 생성 및 활성화**
+
+* **Python 3.8**이 호환성(Paddle, ONNX 등)이 가장 좋습니다.
+
+```bash
+# 환경 이름: ai_edge, 파이썬 버전: 3.8
+conda create -n ai_edge python=3.8 -y
+
+# 활성화
+conda activate ai_edge
+
+```
+
+---
+
+## **4. 핵심 라이브러리 설치**
+
+가장 안정적이고 충돌이 없는 조합입니다. (PaddleOCR, EasyOCR의 단점을 모두 해결한 최종안)
+
+### **4-1. 필수 패키지 설치**
+
+```bash
+# 1. 기본 연산 및 이미지 처리
+pip install numpy opencv-python
+
+# 2. YOLO (객체 인식 - GPU 가속 자동 지원)
+pip install ultralytics
+
+# 3. RapidOCR (글자 인식 - ONNX 런타임 기반, 빠르고 안정적)
+pip install rapidocr_onnxruntime
+
+```
+
+### **4-2. 트러블슈팅 (GUI 에러 방지)**
+
+`opencv-python-headless`가 설치되어 있으면 `cv2.imshow` 창이 뜨지 않습니다. 확인 사살합니다.
+
+```bash
+pip uninstall opencv-python-headless -y
+pip install opencv-python
+
+```
+
+---
+
+## **5. 최종 검증된 소스 코드**
+
+아래 코드는 다음 문제들을 모두 해결한 최종 버전입니다.
+
+1. **USB 대역폭 초과(Timeout) 해결:** MJPG 포맷 강제 적용
+2. **인식률 저하 해결:** 해상도 720p 상향, 패딩(Padding) 전처리 적용
+3. **라이브러리 충돌 해결:** RapidOCR 기본 모델(Default) 사용
+
+**파일명: `main_system.py**`
+
+```python
+import cv2
+import numpy as np
+import re
+from ultralytics import YOLO
+from rapidocr_onnxruntime import RapidOCR
+import warnings
+
+warnings.filterwarnings("ignore")
+
+# [전처리] 인식률 향상을 위한 이미지 보정
+def preprocess_image(img):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # 글자가 꽉 차서 인식 안 되는 것을 방지 (여백 추가)
+    padding = 20
+    padded = cv2.copyMakeBorder(gray, padding, padding, padding, padding, cv2.BORDER_CONSTANT, value=255)
+    # 작은 글씨를 위해 2배 확대
+    upscaled = cv2.resize(padded, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_LINEAR)
+    return upscaled
+
+# [후처리] 특수문자 노이즈 제거
+def clean_text(text):
+    # 영문, 숫자, 일부 기호(- :)만 허용
+    cleaned = re.sub(r'[^a-zA-Z0-9\-\: ]', '', text)
+    return cleaned.strip()
+
+def main():
+    print("🚀 AI Edge System Started (YOLO + RapidOCR)")
+    
+    # 1. YOLO 로드
+    try:
+        yolo_model = YOLO('runs/detect/train/weights/best.pt') # 학습된 모델이 있다면
+    except:
+        yolo_model = YOLO('yolov8n.pt') # 없으면 기본 모델
+
+    # 2. OCR 로드 (기본 모델 사용 -> 자동 다운로드됨)
+    ocr = RapidOCR() 
+
+    # 3. 카메라 설정 (핵심: MJPG + 해상도 UP)
+    cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    cap.set(cv2.CAP_PROP_FPS, 30)
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+    print(f"✅ Camera Ready: {cap.get(3)}x{cap.get(4)}")
+    
+    last_text = ""
+    trigger = False
+
+    while True:
+        ret, frame = cap.read()
+        if not ret: continue
+
+        # 키 입력 (Space: 인식, Q: 종료)
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q'): break
+        elif key == ord(' '): trigger = True
+
+        # YOLO 추론
+        results = yolo_model(frame, device=0, verbose=False, conf=0.6)
+
+        for box in results[0].boxes:
+            x1, y1, x2, y2 = map(int, box.xyxy[0])
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+            if trigger:
+                # 박스 영역 추출 (좌표 안전 처리)
+                h, w, _ = frame.shape
+                cx1, cy1 = max(0, x1), max(0, y1)
+                cx2, cy2 = min(w, x2), min(h, y2)
+                cropped = frame[cy1:cy2, cx1:cx2]
+
+                if cropped.size > 0:
+                    try:
+                        # 전처리 및 OCR
+                        processed = preprocess_image(cropped)
+                        ocr_result, _ = ocr(processed)
+                        
+                        if ocr_result:
+                            valid_texts = []
+                            for item in ocr_result:
+                                # 결과 파싱 안전장치
+                                if isinstance(item, (list, tuple)) and len(item) >= 2:
+                                    text = item[1] if isinstance(item[1], str) else item[0]
+                                    clean = clean_text(text)
+                                    if len(clean) >= 2:
+                                        valid_texts.append(clean)
+                            
+                            if valid_texts:
+                                last_text = " ".join(valid_texts)
+                                print(f"✅ [Result] {last_text}")
+                            else:
+                                print("⚠️ No valid text")
+                        else:
+                            print("⚠️ No text found")
+                    except Exception as e:
+                        print(f"❌ Error: {e}")
+
+            if last_text:
+                cv2.rectangle(frame, (x1, y1-30), (x1 + len(last_text)*15, y1), (0,0,0), -1)
+                cv2.putText(frame, last_text, (x1, y1 - 10), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
+        if trigger: trigger = False
+        
+        # 보기 편하게 화면 리사이즈 (인식은 원본 고화질로 함)
+        display = cv2.resize(frame, (800, 450))
+        cv2.imshow("AI System", display)
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    main()
+
+```
+
+---
+
+## **6. 자주 발생하는 에러와 해결책 (FAQ)**
+
+| 에러 메시지 | 원인 | 해결책 |
+| --- | --- | --- |
+| `select() timeout` | USB 대역폭 초과 | 코드의 `fourcc`를 **MJPG**로 설정 (`cap.set`) |
+| `can't open camera` | 연결 끊김 | 윈도우 PowerShell에서 `usbipd attach` 다시 실행 |
+| `Segmentation fault` | 라이브러리 충돌 | `Shapely` 재설치 또는 **RapidOCR**로 교체 (현재 적용됨) |
+| `IndexError: list index` | 사전 파일 불일치 | 커스텀 사전 쓰지 말고 **기본 모델(Default)** 사용 |
+| `nshzz...` (암호문) | 사전 순서 꼬임 | 위와 동일 (기본 모델 사용 시 해결됨) |
+
