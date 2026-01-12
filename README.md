@@ -9,10 +9,11 @@ cd ~/linux_settings
 source ~/.zshrc
 ./python_setup.sh
 
-# 4. 자격 증명을 파일에 영구적으로 저장하도록 설정
-git config --global credential.helper store
+---
+### git Step 1. 자격 증명을 파일에 영구적으로 저장하도록 설정
+- git config --global credential.helper store
 
-# 5. 한 번만 더 입력하세요 (이후에는 묻지 않습니다)
-git push origin main
-# Username: [내 아이디]
-# Password: [발급받은 GitHub Token]
+### git Step 2. 한 번만 더 입력하세요 (이후에는 묻지 않습니다)
+- git push origin main
+- Username: [내 아이디]
+- Password: [발급받은 GitHub Token]
