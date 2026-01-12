@@ -6,7 +6,7 @@ BACKUP_ROOT="$DOTFILES_DIR/back"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 BACKUP_DIR="$BACKUP_ROOT/$TIMESTAMP"
 # 관리할 파일 목록
-FILES=(".zshrc" ".vimrc" ".p10k.zsh" "install.sh" "save_dotfiles.sh")
+FILES=(".zshrc" ".vimrc" ".p10k.zsh" "install.sh" "save_settings.sh")
 
 # --- 시작 ---
 echo "🚀 설정 백업 및 Git 업로드를 시작합니다..."
