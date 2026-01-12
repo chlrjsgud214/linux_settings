@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- 설정 ---
-DOTFILES_DIR="$HOME/dotfiles"
+DOTFILES_DIR="$HOME/linux_settings"
 BACKUP_ROOT="$DOTFILES_DIR/back"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 BACKUP_DIR="$BACKUP_ROOT/$TIMESTAMP"
