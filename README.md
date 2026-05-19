@@ -1,19 +1,38 @@
-# 1. 내 설정 저장소 가져오기
-git clone https://github.com/chlrjsgud214/linux_settings.git
+# linux_settings
 
-# 2. 폴더로 이동
+Ubuntu/WSL 환경에서 쓰는 zsh 중심 개발 설정 저장소입니다.
+
+## 빠른 설치
+
+```bash
+git clone https://github.com/chlrjsgud214/linux_settings.git ~/linux_settings
 cd ~/linux_settings
-
-# 3. 설치 스크립트 실행
+chmod +x install.sh python_setup.sh save_settings.sh
 ./install.sh
 source ~/.zshrc
+```
+
+AI Edge용 conda/python 환경까지 설치하려면 추가로 실행합니다.
+
+```bash
 ./python_setup.sh
+```
 
----
-### git Step 1. 자격 증명을 파일에 영구적으로 저장하도록 설정
-- git config --global credential.helper store
+## 구성
 
-### git Step 2. 한 번만 더 입력하세요 (이후에는 묻지 않습니다)
-- git push origin main
-- Username: [내 아이디]
-- Password: [발급받은 GitHub Token]
+- `.zshrc`: Oh My Zsh, Powerlevel10k, zsh 플러그인, Python venv 자동 활성화, conda alias
+- `.p10k.zsh`: Powerlevel10k 프롬프트 설정
+- `.vimrc`: Vim/Neovim 플러그인과 기본 단축키
+- `install.sh`: zsh 환경과 필수 apt 패키지 설치
+- `python_setup.sh`: Miniconda와 `ai_edge` conda 환경 설치
+- `save_settings.sh`: 현재 홈 디렉토리 설정을 백업하고 Git에 업로드
+- `PACKAGES.md`: 설치 패키지와 역할 정리
+
+## Git 자격 증명 저장
+
+```bash
+git config --global credential.helper store
+git push origin main
+```
+
+`Password`에는 GitHub 비밀번호가 아니라 Personal Access Token을 입력합니다.

@@ -1,60 +1,94 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-echo "🚀 개발 환경 자동 구축을 시작합니다..."
+DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
 
-# 1. 필수 패키지 설치 (Ubuntu/WSL 기준)
-echo "📦 필수 패키지 설치 중..."
+APT_PACKAGES=(
+  git
+  zsh
+  curl
+  wget
+  unzip
+  fontconfig
+  fonts-nanum
+  vim-gtk3
+  neovim
+  fzf
+  ripgrep
+  bat
+  btop
+  ncdu
+  jq
+  tldr
+  tmux
+  linux-tools-virtual
+  hwdata
+)
+
+echo "개발용 zsh 환경 설치를 시작합니다."
+
+echo "[1/6] apt 패키지 설치"
 sudo apt update
-sudo apt install -y git vim-gtk3 curl zsh fzf ripgrep bat btop ncdu jq tldr tmux
+sudo apt install -y "${APT_PACKAGES[@]}"
 
-# 2. Oh My Zsh 설치 (없을 경우만)
+echo "[2/6] Oh My Zsh 설치"
 if [ ! -d "$HOME/.oh-my-zsh" ]; then
-    echo "🎨 Oh My Zsh 설치 중..."
+  RUNZSH=no CHSH=no KEEP_ZSHRC=yes \
     sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+else
+  echo "Oh My Zsh가 이미 설치되어 있습니다."
 fi
 
-# 3. Zsh 플러그인 & 테마 설치
-ZSH_CUSTOM=${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}
+echo "[3/6] zsh 플러그인 및 Powerlevel10k 설치"
+mkdir -p "$ZSH_CUSTOM/plugins" "$ZSH_CUSTOM/themes"
 
-# zsh-autosuggestions
 if [ ! -d "$ZSH_CUSTOM/plugins/zsh-autosuggestions" ]; then
-    git clone https://github.com/zsh-users/zsh-autosuggestions $ZSH_CUSTOM/plugins/zsh-autosuggestions
+  git clone https://github.com/zsh-users/zsh-autosuggestions "$ZSH_CUSTOM/plugins/zsh-autosuggestions"
 fi
 
-# zsh-syntax-highlighting
 if [ ! -d "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" ]; then
-    git clone https://github.com/zsh-users/zsh-syntax-highlighting.git $ZSH_CUSTOM/plugins/zsh-syntax-highlighting
+  git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting"
 fi
 
-# Powerlevel10k 테마
 if [ ! -d "$ZSH_CUSTOM/themes/powerlevel10k" ]; then
-    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git $ZSH_CUSTOM/themes/powerlevel10k
+  git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$ZSH_CUSTOM/themes/powerlevel10k"
 fi
 
-# 4. Vim Plug (플러그인 매니저) 설치
+echo "[4/6] Vim Plug 설치"
 if [ ! -f "$HOME/.vim/autoload/plug.vim" ]; then
-    curl -fLo ~/.vim/autoload/plug.vim --create-dirs \
-        https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
+  curl -fLo "$HOME/.vim/autoload/plug.vim" --create-dirs \
+    https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
 fi
 
-# 5. Lazygit 설치 (최신 버전)
-echo "zzz Lazygit 설치 중..."
-LAZYGIT_VERSION=$(curl -s "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" | grep -Po '"tag_name": "v\K[^"]*')
-curl -Lo lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz"
-tar xf lazygit.tar.gz lazygit
-sudo install lazygit /usr/local/bin
-rm lazygit.tar.gz lazygit
+echo "[5/6] lazygit 설치"
+case "$(uname -m)" in
+  x86_64) LAZYGIT_ARCH="x86_64" ;;
+  aarch64|arm64) LAZYGIT_ARCH="arm64" ;;
+  *)
+    echo "지원하지 않는 lazygit 아키텍처입니다: $(uname -m)"
+    LAZYGIT_ARCH=""
+    ;;
+esac
 
-# 6. 설정 파일 심볼릭 링크 연결 (핵심!)
-echo "🔗 설정 파일 연결 중..."
-ln -sf ~/linux_settings/.zshrc ~/.zshrc
-ln -sf ~/linux_settings/.vimrc ~/.vimrc
-ln -sf ~/linux_settings/.p10k.zsh ~/.p10k.zsh
-# ln -sf ~/linux_settings/.tmux.conf ~/.tmux.conf
+if [ -n "$LAZYGIT_ARCH" ]; then
+  LAZYGIT_VERSION="$(curl -s https://api.github.com/repos/jesseduffield/lazygit/releases/latest | grep -Po '"tag_name": "v\K[^"]*')"
+  curl -Lo /tmp/lazygit.tar.gz \
+    "https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_${LAZYGIT_VERSION}_Linux_${LAZYGIT_ARCH}.tar.gz"
+  tar -C /tmp -xf /tmp/lazygit.tar.gz lazygit
+  sudo install /tmp/lazygit /usr/local/bin/lazygit
+  rm -f /tmp/lazygit.tar.gz /tmp/lazygit
+fi
 
-# 7. Vim 플러그인 자동 설치
-vim +PlugInstall +qall
+echo "[6/6] dotfile 심볼릭 링크 연결"
+ln -sf "$DOTFILES_DIR/.zshrc" "$HOME/.zshrc"
+ln -sf "$DOTFILES_DIR/.vimrc" "$HOME/.vimrc"
+ln -sf "$DOTFILES_DIR/.p10k.zsh" "$HOME/.p10k.zsh"
 
-echo "✅ 모든 설치가 완료되었습니다! zsh를 실행하세요."
-echo "👉 source ~/.zshrc"
+if command -v vim >/dev/null 2>&1; then
+  vim +PlugInstall +qall
+fi
 
+echo "설치가 완료되었습니다."
+echo "zsh를 기본 쉘로 쓰려면 필요 시 실행: chsh -s $(command -v zsh)"
+echo "현재 터미널에 적용: source ~/.zshrc"
